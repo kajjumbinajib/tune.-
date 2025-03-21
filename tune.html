@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tune App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #2979ff;
+    }
+
+    input {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #2979ff;
+      border-radius: 5px;
+      background-color: #1e1e1e;
+      color: #ffffff;
+    }
+
+    button {
+      padding: 10px 20px;
+      background-color: #2979ff;
+      color: #ffffff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #1c5bb8;
+    }
+
+    #messages {
+      height: 300px;
+      overflow-y: scroll;
+      border: 1px solid #2979ff;
+      padding: 10px;
+      margin-bottom: 10px;
+      background-color: #1e1e1e;
+    }
+
+    #auth-screen, #chat-screen {
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    #chat-screen {
+      display: none;
+    }
+  </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+</head>
+<body>
+  <div id="auth-screen">
+    <h1>Tune Login</h1>
+    <input type="text" id="phone-number" placeholder="Phone Number">
+    <button id="verify-phone">Verify Phone</button>
+    <input type="text" id="verification-code" placeholder="Verification Code">
+    <button id="sign-in">Sign In</button>
+  </div>
+
+  <div id="chat-screen">
+    <h1>Tune Chat</h1>
+    <div id="messages"></div>
+    <input type="text" id="message-input" placeholder="Enter Message">
+    <button id="send-message">Send</button>
+  </div>
+
+  <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // DOM Elements
+    const authScreen = document.getElementById('auth-screen');
+    const chatScreen = document.getElementById('chat-screen');
+    const phoneNumberInput = document.getElementById('phone-number');
+    const verifyPhoneButton = document.getElementById('verify-phone');
+    const verificationCodeInput = document.getElementById('verification-code');
+    const signInButton = document.getElementById('sign-in');
+    const messagesDiv = document.getElementById('messages');
+    const messageInput = document.getElementById('message-input');
+    const sendMessageButton = document.getElementById('send-message');
+
+    let verificationId;
+
+    // Verify Phone Number
+    verifyPhoneButton.addEventListener('click', () => {
+      const phoneNumber = phoneNumberInput.value;
+      const appVerifier = new firebase.auth.RecaptchaVerifier('verify-phone');
+
+      auth.signInWithPhoneNumber(phoneNumber, appVerifier)
+        .then((confirmationResult) => {
+          verificationId = confirmationResult.verificationId;
+          alert('Verification code sent!');
+        })
+        .catch((error) => {
+          console.error('Error sending verification code:', error);
+        });
+    });
+
+    // Sign In with Verification Code
+    signInButton.addEventListener('click', () => {
+      const code = verificationCodeInput.value;
+      const credential = firebase.auth.PhoneAuthProvider.credential(verificationId, code);
+
+      auth.signInWithCredential(credential)
+        .then(() => {
+          authScreen.style.display = 'none';
+          chatScreen.style.display = 'block';
+          loadMessages();
+        })
+        .catch((error) => {
+          console.error('Error signing in:', error);
+        });
+    });
+
+    // Send Message
+    sendMessageButton.addEventListener('click', () => {
+      const message = messageInput.value;
+      const user = auth.currentUser;
+
+      if (user && message) {
+        db.collection('messages').add({
+          senderId: user.uid,
+          content: message,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        })
+        .then(() => {
+          messageInput.value = '';
+        })
+        .catch((error) => {
+          console.error('Error sending message:', error);
+        });
+      }
+    });
+
+    // Load Messages
+    function loadMessages() {
+      db.collection('messages')
+        .orderBy('timestamp')
+        .onSnapshot((snapshot) => {
+          messagesDiv.innerHTML = '';
+          snapshot.forEach((doc) => {
+            const message = doc.data();
+            const messageElement = document.createElement('div');
+            messageElement.textContent = `${message.senderId}: ${message.content}`;
+            messagesDiv.appendChild(messageElement);
+          });
+        });
+    }
+
+    // Auth State Listener
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        authScreen.style.display = 'none';
+        chatScreen.style.display = 'block';
+        loadMessages();
+      } else {
+        authScreen.style.display = 'block';
+        chatScreen.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>
